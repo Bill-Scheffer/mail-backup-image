@@ -15,8 +15,9 @@ Published as `ghcr.io/bill-scheffer/mail-backup:restic<version>-vandelay<version
 before it pushes anything. A pull request runs every step but the registry login and the push, and a
 dispatch from a branch pushes the tested image as `branch-<short sha>` only. `main` publishes the tag
 once: a tag that already exists is never re-pushed, so a change to what is built (the `Dockerfile`,
-anything it copies in, a value in `env:`, or a step up to and including the image build) needs new
-versions in the tag, and the build fails a pull request that makes one without them. Pin the image
+anything it copies in, a value in `env:`, or a step up to and including the image build) needs a new
+tag: a new restic or Vandelay version, or else a new `TAG_SUFFIX` in the workflow (such as `-b2`).
+The build fails a pull request that makes one without it. Pin the image
 **by digest**; the digest you pin keeps its tag (MainThrive MAI-1021).
 
 A digest pinned without a tag of its own is protected by tagging it `pinned-<first 12 hex>`; the

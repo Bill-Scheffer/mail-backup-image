@@ -33,6 +33,9 @@ env:
   VANDELAY_VERSION: 1.0.11
   VANDELAY_SHA256: 5e9de1c693148d5a44cb639f0e1238b1d82b8a36ee781dc66ef4ae00abdac774
   IMAGE: ghcr.io/bill-scheffer/mail-backup
+  # Appended to the tag. A change to what is built that moves neither version sets a new one (e.g. "-b2"), because a
+  # tag is pushed once and never re-pushed.
+  TAG_SUFFIX: ""
 
 jobs:
   build:
@@ -50,15 +53,17 @@ jobs:
       # ⛔ A release tag names one image, forever (MAI-1021). A main build that re-pushed it would change what the
       # backup CronJobs run, or leave the digest they pin untagged, and an untagged version is the first thing a
       # registry cleanup deletes. So a tag that already exists is never re-pushed, and a change to what goes into the
-      # image needs a new tag; this fails a pull request that makes one without it. What goes in: the Dockerfile, any
-      # file it COPYs or ADDs, the env: values, and every step up to and including the image build. Left out, because
-      # none can change the image: comments, step names, push:/load:, the registry login and this step.
+      # image needs a new tag (TAG_SUFFIX, or a new version); this fails a pull request that makes one without it. What
+      # goes in: the Dockerfile, the repo's other files once the Dockerfile copies or mounts anything from the context,
+      # the env: values, and every step up to and including the image build. Left out: comments, step names,
+      # push:/load:, the registry login, TAG_SUFFIX (a new one is a new tag) and this step; none can change the image,
+      # and the build step is held to push: false, so the push step below is the only way out.
       # The package is public, so this reads it without logging in.
       - name: The release tag is new, or already names this content (it is never re-pushed)
         id: release
         run: |
           set -eu
-          tag="restic${RESTIC_VERSION}-vandelay${VANDELAY_VERSION}"
+          tag="restic${RESTIC_VERSION}-vandelay${VANDELAY_VERSION}${TAG_SUFFIX}"
           if ! have=$(docker buildx imagetools inspect "${IMAGE}:${tag}" --format '{{.Manifest.Digest}} {{index .Image.Config.Labels "org.opencontainers.image.revision"}}' 2>&1); then
             case "$have" in *": not found"*) ;; *) echo "::error::cannot read ${IMAGE}:${tag}: ${have}"; exit 1 ;; esac
             echo "${tag} is new: a main build publishes it"
@@ -73,12 +78,20 @@ jobs:
             git show "$1:.github/workflows/build.yml" | awk '
               /^env:/ { on = 1 }
               /^      - / { if (build) exit; skip = /name: The release tag is new/ || /uses: docker\/login-action/ }
-              /uses: docker\/build-push-action/ { build = 1 }
-              on && !skip && !/^[[:space:]]*(#|$)/ && !/^[[:space:]]*(- )?name:/ && !/^[[:space:]]*(push|load):/'
+              /^[[:space:]]*(- )?uses: docker\/build-push-action/ { build = 1 }
+              on && !skip && !/^[[:space:]]*(#|$)/ && !/^[[:space:]]*(- )?name:/ && !/^[[:space:]]*(push|load):/ && !/^  TAG_SUFFIX:/'
           }
-          # The build context is this repo, so what the Dockerfile COPYs or ADDs (none today) is an input too.
-          copied=$(git show HEAD:Dockerfile | awk 'toupper($1) ~ /^(COPY|ADD)$/ && $0 !~ /--from=/ { for (i = 2; i < NF; i++) if ($i !~ /^--/) print $i }')
-          changed=$(git diff --name-only "$rev" HEAD -- Dockerfile $copied)
+          # Since push: and the login are left out above, the build step itself must never push: only the push step
+          # below, which reads this step's verdict, may.
+          git show HEAD:.github/workflows/build.yml | awk '/^      - / { if (build) exit } /^[[:space:]]*(- )?uses: docker\/build-push-action/ { build = 1 } build' \
+            | grep -qE '^[[:space:]]+push: false$' || { echo "::error::the image build step must say push: false"; exit 1; }
+          # The build context is this repo. Nothing in it reaches the image today; once the Dockerfile copies or mounts
+          # anything from the context, every file but docs and workflows counts (fail closed, no parsing).
+          inputs="Dockerfile"
+          if git show HEAD:Dockerfile | grep -Eiv -- '--from=' | grep -Eiq '^[[:space:]]*(COPY|ADD)[[:space:]]|--mount=[^ ]*type=bind'; then
+            inputs=". :!*.md :!LICENSE :!.github"
+          fi
+          changed=$(git diff --name-only "$rev" HEAD -- $inputs)
           [ "$(inputs_of "$rev")" = "$(inputs_of HEAD)" ] || changed="${changed} build.yml"
           if [ -n "$changed" ]; then
             echo "::error::${tag} already names ${digest}, built from ${rev}, and what goes into the image changed since:" $changed "-- the tag must change"
@@ -136,16 +149,17 @@ jobs:
           PUBLISH: ${{ steps.release.outputs.publish }}
         run: |
           set -eu
-          release="restic${RESTIC_VERSION}-vandelay${VANDELAY_VERSION}"
-          tag="$release"
+          # The build tags the image locally without TAG_SUFFIX; the published tag carries it.
+          built="${IMAGE}:restic${RESTIC_VERSION}-vandelay${VANDELAY_VERSION}"
+          tag="restic${RESTIC_VERSION}-vandelay${VANDELAY_VERSION}${TAG_SUFFIX}"
           if [ "$GITHUB_REF" != refs/heads/main ]; then
             tag="branch-${GITHUB_SHA::7}"
-            docker tag "${IMAGE}:${release}" "${IMAGE}:${tag}"
           elif [ "$PUBLISH" != true ]; then
             echo "${tag} already exists and is never re-pushed: built and checked, nothing pushed"
             echo "### ${IMAGE}: \`${tag}\` already exists and is never re-pushed; this run built and checked, and pushed nothing" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          [ "$built" = "${IMAGE}:${tag}" ] || docker tag "$built" "${IMAGE}:${tag}"
           docker push "${IMAGE}:${tag}"
           digest=$(docker inspect --format '{{index .RepoDigests 0}}' "${IMAGE}:${tag}")
           echo "pushed ${digest}"
