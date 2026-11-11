@@ -35,7 +35,7 @@ env:
   IMAGE: ghcr.io/bill-scheffer/mail-backup
   # Appended to the tag. A change to what is built that moves neither version sets a new one (e.g. "-b2"), because a
   # tag is pushed once and never re-pushed.
-  TAG_SUFFIX: ""
+  TAG_SUFFIX: "-b2"
 
 jobs:
   build:
@@ -132,6 +132,8 @@ jobs:
           docker run --rm "$ref" restic version | grep -q "restic ${RESTIC_VERSION} "
           docker run --rm "$ref" vandelay --version | grep -qx "vandelay ${VANDELAY_VERSION}"
           docker run --rm "$ref" sh -c 'command -v jq && command -v wget' >/dev/null
+          # The backup VACUUMs each archive with it (MainThrive MAI-1348): VACUUM INTO, which needs SQLite 3.27 or later.
+          docker run --rm "$ref" sqlite3 :memory: "VACUUM INTO '/tmp/v.sqlite'"
 
       # ⛔ The release tag is pushed only from main (a push, or a dispatch on main). A dispatch from any other branch
       # pushes the same tested image under branch-<short sha> alone, never the release tag. A pull request never logs
