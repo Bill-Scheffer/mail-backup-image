@@ -5,7 +5,10 @@ One container image for MainThrive's nightly per-account mail backup:
 - **restic** — the official `restic/restic:0.19.1` image, unchanged, pinned by digest;
 - **Vandelay** — Stalwart's account archiver, the released `v1.0.11` x86_64 musl binary, verified
   against the sha256 upstream publishes (and that checksum is pinned in the workflow, so a
-  re-uploaded release asset fails the build).
+  re-uploaded release asset fails the build);
+- **sqlite3** — Alpine's `sqlite` package, so the backup can `VACUUM` each archive after its
+  import: Vandelay never does, and SQLite otherwise keeps a deleted message's bytes in the file
+  (MainThrive MAI-1348). Since `-b2`.
 
 Nothing in either tool is modified. Vandelay exports a Stalwart account over JMAP into a
 self-contained SQLite archive; restic stores those archives, encrypted and deduplicated.
