@@ -1,0 +1,79 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "description": [
+    "MainThrive MAI-1451. This config exists so that the two upstream tools pinned in .github/workflows/build.yml, restic and Vandelay, are proposed when upstream moves. Before it nothing did: MainThrive's own renovate.json follows only the built image ghcr.io/bill-scheffer/mail-backup, not what goes into it.",
+    "enabledManagers is only the regex manager below, on purpose, as in the other companion repos (MainThrive MAI-1427): the action SHAs in the workflows are not what this config is for.",
+    "automerge is false and must stay false. A merge to main publishes a new release tag of the image the nightly mail backup runs, so a person reviews each bump. The image reaches the CronJobs only through MainThrive's own digest pin, which is a second reviewed PR.",
+    "There is no minimumReleaseAge, as in the other companion repos: a soak on a datasource that publishes no release timestamp holds every release forever (MainThrive MAI-1424).",
+    "restic is two matchers on one depName, so Renovate puts both in one branch: RESTIC_IMAGE (tag and digest) and RESTIC_VERSION (the tag alone, which names the release tag and is checked against restic version in the built image).",
+    "Vandelay is read twice, in one group. VANDELAY_VERSION is its release version (github-releases). The comment line under it carries the same release as its tag, beside VANDELAY_SHA256, because the github-release-attachments datasource looks the checksum up by the literal tag and upstream tags carry a v (v1.0.11) that VANDELAY_VERSION does not. That datasource reads the new release's own published checksum, so the PR moves the version, the tag and the sha256 together (measured on Renovate 44.228.0 and 44.239.1, MainThrive MAI-1451). The comment is not an image input: the build's input check skips comment lines. If a PR ever moves the version without the checksum, the build's first step fails closed."
+  ],
+  "enabledManagers": [
+    "custom.regex"
+  ],
+  "automerge": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/build\\.yml$/"
+      ],
+      "matchStrings": [
+        "\\n\\s*RESTIC_IMAGE:\\s*restic/restic:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})",
+        "\\n\\s*RESTIC_VERSION:\\s*(?<currentValue>\\S+)"
+      ],
+      "depNameTemplate": "restic/restic",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/build\\.yml$/"
+      ],
+      "matchStrings": [
+        "\\n\\s*VANDELAY_VERSION:\\s*(?<currentValue>\\S+)"
+      ],
+      "depNameTemplate": "vandelay",
+      "packageNameTemplate": "stalwartlabs/vandelay",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/build\\.yml$/"
+      ],
+      "matchStrings": [
+        "\\n\\s*# Renovate reads the release tag and the checksum below as one pair \\(renovate\\.json\\): vandelay release (?<currentValue>v\\S+)\\s*\\n\\s*VANDELAY_SHA256:\\s*(?<currentDigest>[0-9a-f]{64})"
+      ],
+      "depNameTemplate": "vandelay",
+      "packageNameTemplate": "stalwartlabs/vandelay",
+      "datasourceTemplate": "github-release-attachments"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Vandelay's version and its tag-plus-checksum pair are two readings of one release. One group, so they always arrive in one PR. allowedVersions keeps both readings to plain vX.Y.Z tags: github-releases drops any other tag through extractVersion, and the attachments reading would otherwise still take it.",
+      "matchDepNames": [
+        "vandelay"
+      ],
+      "groupName": "vandelay",
+      "allowedVersions": "/^v?\\d+\\.\\d+\\.\\d+$/"
+    },
+    {
+      "description": "A digest-only restic PR (upstream re-pushed the same tag) changes what is built under an existing release tag, which the build refuses. The PR says what to add.",
+      "matchDepNames": [
+        "restic/restic"
+      ],
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "prBodyNotes": [
+        "⚠️ Same restic version, new digest: set a new `TAG_SUFFIX` in `.github/workflows/build.yml` in this PR, or the build refuses it (a release tag is never re-pushed)."
+      ]
+    }
+  ]
+}
