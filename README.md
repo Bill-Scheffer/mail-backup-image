@@ -2,8 +2,8 @@
 
 One container image for MainThrive's nightly per-account mail backup:
 
-- **restic** — the official `restic/restic:0.19.1` image, unchanged, pinned by digest;
-- **Vandelay** — Stalwart's account archiver, the released `v1.0.11` x86_64 musl binary, verified
+- **restic** — the official `restic/restic` image, unchanged, pinned by tag and digest;
+- **Vandelay** — Stalwart's account archiver, the released x86_64 musl binary, verified
   against the sha256 upstream publishes (and that checksum is pinned in the workflow, so a
   re-uploaded release asset fails the build);
 - **sqlite3** — Alpine's `sqlite` package, so the backup can `VACUUM` each archive after its
@@ -12,6 +12,10 @@ One container image for MainThrive's nightly per-account mail backup:
 
 Nothing in either tool is modified. Vandelay exports a Stalwart account over JMAP into a
 self-contained SQLite archive; restic stores those archives, encrypted and deduplicated.
+
+Both versions live in `env:` in `.github/workflows/build.yml`, and nowhere else. Renovate proposes
+each new restic and Vandelay release there as a PR, never merged without review (`renovate.json`,
+MainThrive MAI-1451).
 
 Published as `ghcr.io/bill-scheffer/mail-backup:restic<version>-vandelay<version>` by
 `.github/workflows/build.yml`, which checks the built image runs both tools at the pinned versions
