@@ -28,8 +28,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  RESTIC_IMAGE: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
-  RESTIC_VERSION: 0.19.1
+  RESTIC_IMAGE: restic/restic:0.20.0@sha256:93999df80d4ac6cb148e82d2ef1fe6a81996f17ff535e772723538211b31555a
+  RESTIC_VERSION: 0.20.0
   VANDELAY_VERSION: 1.0.11
   # Renovate reads the release tag and the checksum below as one pair (renovate.json): vandelay release v1.0.11
   VANDELAY_SHA256: 5e9de1c693148d5a44cb639f0e1238b1d82b8a36ee781dc66ef4ae00abdac774
